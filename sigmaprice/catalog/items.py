@@ -1,4 +1,10 @@
-"""Catalog items management - stub for Module 5"""
+"""Catalog items management - stub for Module 5
+
+TODO: Consider using UUID for code generation instead of random:
+    import uuid
+    code = int(uuid.uuid4().hex[:8], 16) % 90000000 + 10000000
+This gives near-zero collision probability.
+"""
 from typing import Optional
 from decimal import Decimal
 from sigmaprice.core.database import create_session

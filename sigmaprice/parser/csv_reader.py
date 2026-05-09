@@ -2,6 +2,7 @@
 from pathlib import Path
 from typing import Dict, List, Optional
 import csv
+import chardet
 from sigmaprice.core.exceptions import ParseError
 from sigmaprice.core.logger import get_logger
 
@@ -10,21 +11,18 @@ logger = get_logger(__name__)
 
 def read_csv(
     file_path: Path,
-    encoding: str = "utf-8",
-    delimiter: str = ",",
-    skip_empty_lines: bool = True
+    column_map: Optional[Dict[str, str]] = None
 ) -> List[Dict[str, str]]:
     """
-    Read CSV file and return list of rows.
+    Read CSV file with auto-detection of encoding and delimiter.
 
     Args:
         file_path: Path to CSV file
-        encoding: File encoding (default: utf-8)
-        delimiter: Field delimiter (default: ,)
-        skip_empty_lines: Skip empty lines
+        column_map: Dict of our_field -> supplier_column
+            If provided, data will be mapped to our field names.
 
     Returns:
-        List of dictionaries, one per row
+        List of dictionaries with normalized keys
 
     Raises:
         ParseError: If file cannot be read
@@ -32,57 +30,82 @@ def read_csv(
     if not file_path.exists():
         raise ParseError(f"File not found: {file_path}")
 
+    encoding = _detect_encoding(file_path)
+    delimiter = _detect_delimiter(file_path, encoding)
+
     try:
         with open(file_path, 'r', encoding=encoding, newline='') as f:
-            return _parse_csv(f, delimiter, skip_empty_lines)
+            reader = csv.DictReader(f, delimiter=delimiter)
+            rows = list(reader)
     except UnicodeDecodeError:
         try:
             with open(file_path, 'r', encoding='cp1251', newline='') as f:
-                return _parse_csv(f, delimiter, skip_empty_lines)
+                reader = csv.DictReader(f, delimiter=delimiter)
+                rows = list(reader)
         except Exception as e:
             raise ParseError(f"Failed to read CSV file: {e}")
     except Exception as e:
         raise ParseError(f"Failed to read CSV file: {e}")
 
+    reverse_map = {}
+    if column_map:
+        reverse_map = {v: k for k, v in column_map.items()}
 
-def _parse_csv(f, delimiter: str, skip_empty_lines: bool) -> List[Dict[str, str]]:
-    """Parse CSV file content."""
-    reader = csv.DictReader(f, delimiter=delimiter, skip_blank_lines=skip_empty_lines)
+    result = []
+    for row in rows:
+        cleaned = {}
+        for k, v in row.items():
+            if not k:
+                continue
 
-    rows = []
-    for row in reader:
-        cleaned = {k.strip(): _clean_value(v) for k, v in row.items() if k.strip()}
+            k_clean = k.strip()
+            v_clean = v.strip() if v else ''
+
+            if column_map:
+                mapped_key = reverse_map.get(k_clean, k_clean)
+            else:
+                mapped_key = k_clean
+
+            if v_clean:
+                cleaned[mapped_key] = v_clean
+
+        # Check if row has any data
         if cleaned:
-            rows.append(cleaned)
+            result.append(cleaned)
 
-    logger.info(f"CSV rows read: {len(rows)}")
-    return rows
-
-
-def _clean_value(value: Optional[str]) -> Optional[str]:
-    """Clean cell value."""
-    if value is None:
-        return None
-
-    value = value.strip()
-    if value == "":
-        return None
-
-    return value
+    logger.info(f"CSV rows read: {len(result)}")
+    return result
 
 
-def detect_delimiter(file_path: Path) -> str:
-    """Detect CSV delimiter by analyzing first few lines."""
-    with open(file_path, 'r', encoding='utf-8', newline='') as f:
-        sample = f.read(4096)
+def _detect_encoding(file_path: Path) -> str:
+    """Detect file encoding."""
+    try:
+        with open(file_path, 'rb') as f:
+            result = chardet.detect(f.read(10000))
+            encoding = result['encoding'] or 'utf-8'
+            logger.info(f"Detected encoding: {encoding}")
+            return encoding
+    except Exception as e:
+        logger.warning(f"Failed to detect encoding: {e}")
+        return 'utf-8'
 
-    comma_count = sample.count(',')
-    semicolon_count = sample.count(';')
-    tab_count = sample.count('\t')
 
-    if comma_count >= semicolon_count and comma_count >= tab_count:
+def _detect_delimiter(file_path: Path, encoding: str) -> str:
+    """Detect CSV delimiter."""
+    try:
+        with open(file_path, 'r', encoding=encoding, newline='') as f:
+            sample = f.read(4096)
+
+        comma = sample.count(',')
+        semicolon = sample.count(';')
+        tab = sample.count('\t')
+
+        if semicolon > comma and semicolon >= tab:
+            return ';'
+        if tab > comma and tab >= semicolon:
+            return '\t'
         return ','
-    elif semicolon_count >= tab_count:
-        return ';'
-    else:
-        return '\t'
+
+    except Exception as e:
+        logger.warning(f"Failed to detect delimiter: {e}")
+        return ','

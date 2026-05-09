@@ -33,6 +33,7 @@ pydantic-settings==2.1.0
 python-dotenv==1.0.0
 openpyxl==3.1.2
 pandas==2.1.4
+chardet==5.2.0
 
 # Testing
 pytest==7.4.3
