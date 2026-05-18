@@ -118,6 +118,7 @@ class CatalogItem(Base):
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
     product_url = Column(String(500), nullable=True)
     country_origin = Column(String(100), nullable=True)
+    delivery_type = Column(String(20), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

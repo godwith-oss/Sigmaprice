@@ -72,7 +72,7 @@ class MatchResult:
 
 
 @dataclass
-class CatalogItem:
+class CatalogItemData:
     """Internal catalog item"""
     code: str
     name: str
@@ -86,6 +86,7 @@ class CatalogItem:
     category_id: Optional[int]
     product_url: Optional[str]
     country_origin: Optional[str]
+    delivery_type: Optional[str]
 
 
 @dataclass
