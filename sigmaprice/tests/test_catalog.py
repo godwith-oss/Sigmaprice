@@ -145,14 +145,48 @@ class TestDeliveryType:
         result = determine_delivery_type("Какой-то товар", None)
         assert result is None
 
-    def test_damaged_packaging_excluded(self):
-        assert is_excluded_delivery("Видеокарта, поврежденная упаковка") is True
+    @patch('sigmaprice.core.database.get_session')
+    def test_damaged_packaging_excluded(self, mock_get_session):
+        session = MagicMock()
+        mock_get_session.return_value = session
 
-    def test_damaged_box_excluded(self):
-        assert is_excluded_delivery("SSD damaged box") is True
+        rule1 = MagicMock()
+        rule1.pattern = "поврежденная упаковка"
+        rule2 = MagicMock()
+        rule2.pattern = "damaged packaging"
+        rule3 = MagicMock()
+        rule3.pattern = "damaged box"
+        rule4 = MagicMock()
+        rule4.pattern = "утс"
+        rule5 = MagicMock()
+        rule5.pattern = "битая упаковка"
+        session.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
+            rule1, rule2, rule3, rule4, rule5
+        ]
 
-    def test_normal_item_not_excluded(self):
-        assert is_excluded_delivery("Видеокарта RTX 5070") is False
+        assert is_excluded_delivery("Видеокарта, поврежденная упаковка", session) is True
+
+    @patch('sigmaprice.core.database.get_session')
+    def test_damaged_box_excluded(self, mock_get_session):
+        session = MagicMock()
+        mock_get_session.return_value = session
+
+        rule = MagicMock()
+        rule.pattern = "damaged box"
+        session.query.return_value.filter.return_value.order_by.return_value.all.return_value = [rule]
+
+        assert is_excluded_delivery("SSD damaged box", session) is True
+
+    @patch('sigmaprice.core.database.get_session')
+    def test_normal_item_not_excluded(self, mock_get_session):
+        session = MagicMock()
+        mock_get_session.return_value = session
+
+        rule = MagicMock()
+        rule.pattern = "damaged"
+        session.query.return_value.filter.return_value.order_by.return_value.all.return_value = [rule]
+
+        assert is_excluded_delivery("Видеокарта RTX 5070", session) is False
 
 
 class TestNameBuilder:
@@ -509,13 +543,15 @@ class TestManager:
     @patch('sigmaprice.core.database.get_session')
     @patch('sigmaprice.catalog.manager.generate_code')
     @patch('sigmaprice.catalog.manager.determine_category')
+    @patch('sigmaprice.catalog.manager.is_excluded_delivery')
     def test_create_item_excluded_delivery(
-        self, mock_determine_cat, mock_gen_code, mock_get_session
+        self, mock_is_excluded, mock_determine_cat, mock_gen_code, mock_get_session
     ):
         session = MagicMock()
         mock_get_session.return_value = session
         mock_gen_code.return_value = "13784256"
         mock_determine_cat.return_value = 5
+        mock_is_excluded.return_value = True
 
         item = self.make_raw_item(
             name="Видеокарта поврежденная упаковка RTX 5070"

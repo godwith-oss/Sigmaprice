@@ -47,7 +47,7 @@ def create_item(
 
     name = validate_name(item.name)
 
-    if is_excluded_delivery(name):
+    if is_excluded_delivery(name, session):
         raise ValidationError(
             f"Item excluded due to damaged/defective packaging: {name}"
         )

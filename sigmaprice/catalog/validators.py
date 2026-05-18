@@ -1,19 +1,12 @@
 """Validators for catalog item fields"""
 import re
 from typing import Optional
+from sqlalchemy.orm import Session
 from sigmaprice.core.exceptions import ValidationError
 
 DELIVERY_TYPE_VALUES = {"OEM", "Retail"}
 OEM_SYNONYMS = {"oem", "tray"}
 RETAIL_SYNONYMS = {"box", "rtl", "ret", "retail"}
-EXCLUDED_DELIVERY_KEYWORDS = {
-    "поврежденная упаковка",
-    "повреждённая упаковка",
-    "damaged packaging",
-    "damaged box",
-    "утс",
-    "битая упаковка",
-}
 
 
 def validate_name(name: str) -> str:
@@ -79,12 +72,10 @@ def determine_delivery_type(item_name: str, raw_delivery_type: Optional[str] = N
     return None
 
 
-def is_excluded_delivery(item_name: str) -> bool:
+def is_excluded_delivery(item_name: str, session: Optional[Session] = None) -> bool:
     """
     Check if item should be excluded due to damaged/defective packaging.
+    Reads exclusion patterns from knowledge_base table.
     """
-    name_lower = item_name.lower()
-    for keyword in EXCLUDED_DELIVERY_KEYWORDS:
-        if keyword in name_lower:
-            return True
-    return False
+    from sigmaprice.knowledge import is_excluded_by_kb
+    return is_excluded_by_kb(item_name, session)
