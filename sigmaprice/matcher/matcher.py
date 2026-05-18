@@ -9,7 +9,7 @@ from sigmaprice.db.models import (
     CatalogItem, SupplierItemMapping, ItemEmbedding
 )
 from sigmaprice.matcher.config import MatcherConfig, DEFAULT_CONFIG
-from sigmaprice.matcher.factory import get_embedding_provider
+from sigmaprice.matcher.factory import get_embedding_provider, get_web_research_provider
 
 logger = get_logger(__name__)
 
@@ -57,6 +57,10 @@ def match_item(item: RawItem, supplier_id: int, config: MatcherConfig | None = N
         return result
 
     result = _match_by_embedding(item, session, config)
+    if result:
+        return result
+
+    result = _match_by_web_research(item, session, config)
     if result:
         return result
 
@@ -126,6 +130,101 @@ def _match_by_embedding(item: RawItem, session, config: MatcherConfig) -> MatchR
             method="embedding_match",
             is_new=False
         )
+    return None
+
+
+def _match_by_web_research(item: RawItem, session, config: MatcherConfig) -> MatchResult | None:
+    """Уровень 4: Веб-поиск для сложных случаев."""
+    provider = get_web_research_provider(config)
+    if provider is None:
+        return None
+
+    query = (
+        f"Товар: {item.name}. "
+        f"Производитель: {item.manufacturer or 'неизвестен'}. "
+    )
+    if item.article:
+        query += f"Артикул: {item.article}. "
+
+    try:
+        result = provider.research(item, query)
+        if result.get("found") and result.get("confidence", 0) >= 0.7:
+            info = result.get("info", "")
+            model_match = _extract_model_from_research(info, item.name)
+
+            if model_match:
+                catalog_item = session.query(CatalogItem).filter(
+                    CatalogItem.name.ilike(f"%{model_match}%")
+                ).first()
+                if catalog_item:
+                    _save_mapping(session, catalog_item.id, item.supplier_id, item.supplier_code)
+                    return MatchResult(
+                        catalog_item_id=catalog_item.id,
+                        confidence=result.get("confidence", 0.8),
+                        method="web_research_match",
+                        is_new=False
+                    )
+
+        if result.get("found"):
+            logger.info(
+                f"Web research for '{item.name}': found but no catalog match. "
+                f"Confidence: {result.get('confidence')}"
+            )
+
+    except Exception as e:
+        logger.error(f"Web research error for '{item.name}': {e}")
+
+    return None
+
+
+def research_item(item_name: str, query: str, config: MatcherConfig | None = None) -> dict:
+    """
+    Research an item on the web using configured provider.
+    Used by Module 9 (feedback) to verify user comments.
+    """
+    if config is None:
+        config = DEFAULT_CONFIG
+
+    provider = get_web_research_provider(config)
+    if provider is None:
+        return {"found": False, "info": "Web research provider not configured", "confidence": 0.0}
+
+    dummy_item = RawItem(
+        supplier_id=0,
+        supplier_code="",
+        name=item_name,
+        description="",
+        price=0,
+        currency="RUB",
+        availability="in_stock",
+        quantity=None,
+        warranty_months=None,
+        article=None,
+        ean=None,
+        manufacturer=None,
+        delivery_type=None,
+    )
+
+    return provider.research(dummy_item, query)
+
+
+def _extract_model_from_research(research_info: str, item_name: str) -> str | None:
+    """Extract potential model name from web research results."""
+    import re
+
+    if not research_info:
+        return None
+
+    for word in item_name.split():
+        if len(word) >= 4 and word.isalnum():
+            if word in research_info:
+                return word
+
+    rtx_pattern = r'(RTX\s*\d{4}\s*(Ti|SUPER)?)'
+    match = re.search(rtx_pattern, research_info, re.IGNORECASE)
+    if match:
+        return match.group(0)
+
     return None
 
 

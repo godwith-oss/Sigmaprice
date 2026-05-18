@@ -26,6 +26,9 @@ class UserRole(enum.Enum):
 
 class FeedbackStatus(enum.Enum):
     PENDING = "pending"
+    ANALYZING = "analyzing"
+    AUTO_RESOLVED = "auto_resolved"
+    MANUAL_REQUIRED = "manual_required"
     RESOLVED = "resolved"
     REJECTED = "rejected"
 
@@ -246,6 +249,7 @@ class FeedbackItem(Base):
     admin_notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     resolved_at = Column(DateTime, nullable=True)
+    auto_fixed = Column(Boolean, default=False)
 
     user = relationship("User", back_populates="feedback_items")
     catalog_item = relationship("CatalogItem", back_populates="feedback_items")

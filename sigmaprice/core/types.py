@@ -22,6 +22,9 @@ class UserRole(str, Enum):
 
 class FeedbackStatus(str, Enum):
     PENDING = "pending"
+    ANALYZING = "analyzing"
+    AUTO_RESOLVED = "auto_resolved"
+    MANUAL_REQUIRED = "manual_required"
     RESOLVED = "resolved"
     REJECTED = "rejected"
 
