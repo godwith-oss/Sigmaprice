@@ -217,7 +217,10 @@ class User(Base):
     username = Column(String(100), nullable=False, unique=True)
     password_hash = Column(String(200), nullable=False)
     role = Column(Enum(UserRole), nullable=False)
+    display_name = Column(String(200), nullable=True)
+    is_active = Column(Boolean, default=True)
     is_trusted = Column(Boolean, default=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
 
